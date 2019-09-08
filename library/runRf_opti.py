@@ -13,10 +13,12 @@ from scipy import stats
 import matplotlib.pyplot as plt
 
 """
-output: R squared value and MSE of best hyper parameters:
+output: MSE and R squared value of best hyper parameters:
         self.mse_best, self.rsq_best
         RF model with those hyper parameters:
         self.reg_best
+        Hyper Parameter Tuning Log
+        self.dfTuningLog
 """
 
 class runRf_opti:
@@ -39,7 +41,10 @@ class runRf_opti:
         self.param_dict_best = {}
         self.rsq_best = 0.0
         self.mse_best = 1e15
-        self.fn_best  = 1e15 
+        self.fn_best  = 1e15
+
+        #dataframe for parameter tuning log
+        self.dfTuningLog = pd.DataFrame({})
 
         #declariation
         if (model == 'reg'):
@@ -54,7 +59,7 @@ class runRf_opti:
         
         self._loopCv(self.key_list, **self.param_dict)
         
-        print('***best hyper parameter***')
+        print('***Best Hyper Parameter***')
         
         if (self.model == 'reg'):
             print(self.mse_best, self.rsq_best)
@@ -70,7 +75,6 @@ class runRf_opti:
         else:
             self.reg_best = RandomForestClassifier(**self.param_dict_best)
         self.reg_best.fit(self.x_data, self.t_data)
-        
         
         
     def _loopCv(self, key_list, **param_dict):
@@ -118,10 +122,19 @@ class runRf_opti:
         rsq_test = r2_score(t_test, y_test)
         mse_tr   = mean_squared_error(t_train, y_train)
         mse_test = mean_squared_error(t_test,  y_test)
-            
+
+        self.dfTuningLog = pd.concat([self.dfTuningLog, pd.DataFrame(param_dict, index=[0])], sort=False, ignore_index=True)
+        idxTuningLog = self.dfTuningLog.shape[0]-1
+
         if (self.model == 'reg'):
             print ('%s: mse_train:%0.4f, slope_train:%0.4f, rsq_train:%0.4f, mse_test:%0.4f, slope_test:%0.4f, rsq_test:%0.4f' %
                    (param_dict, mse_tr, slope_tr, rsq_tr, mse_test, slope_test, rsq_test ))
+            self.dfTuningLog.loc[idxTuningLog, 'mse_train']   = mse_tr
+            self.dfTuningLog.loc[idxTuningLog, 'slope_train'] = slope_tr
+            self.dfTuningLog.loc[idxTuningLog, 'rsq_train']   = rsq_tr
+            self.dfTuningLog.loc[idxTuningLog, 'mse_test']    = mse_test
+            self.dfTuningLog.loc[idxTuningLog, 'slope_test']  = slope_test
+            self.dfTuningLog.loc[idxTuningLog, 'rsq_test']    = rsq_test
             
             #pick up if current setting is better than previous one
             if (rsq_test > self.rsq_best) and (mse_test < self.mse_best):
@@ -129,21 +142,25 @@ class runRf_opti:
                 self.mse_best = mse_test
                 self.param_dict_best = param_dict
 
-                self.plot_train = np.append(self.plot_train, [r_value_tr**2])
-                self.plot_test  = np.append(self.plot_test,  [r_value_test**2])
+                self.plot_train = np.append(self.plot_train, [rsq_tr])
+                self.plot_test  = np.append(self.plot_test,  [rsq_test])
 
         else:
-            confMtx = confusion_matrix(y_test, t_test)
-            #confMtx = [[true_neg, false_pos], [false_neg, true_pos]]
+            confMtx = confusion_matrix(y_test, t_test);  #confMtx = [[true_neg, false_pos], [false_neg, true_pos]]
             print ('%s: mse:%0.4f, confustion_matrix:%0.4f %0.4f %0.4f %0.4f' %
                    (param_dict, mse_test, confMtx[0][0], confMtx[0][1], confMtx[1][0], confMtx[1][1]) )
-
+            self.dfTuningLog.loc[idxTuningLog, 'mse_test']   = mse_test
+            self.dfTuningLog.loc[idxTuningLog, 'tn'] = confMtx[0][0]
+            self.dfTuningLog.loc[idxTuningLog, 'fp'] = confMtx[0][1]
+            self.dfTuningLog.loc[idxTuningLog, 'fn'] = confMtx[1][0]
+            self.dfTuningLog.loc[idxTuningLog, 'tp'] = confMtx[1][1]
+            
             #metric is false negative
             if (confMtx[1][0] < self.fn_best):
                 self.fn_best = confMtx[1][0]
                 self.mse_best = mse_test
                 self.param_dict_best = param_dict
-            
+                
 
     def plot_Rsq_score(self):
 

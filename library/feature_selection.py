@@ -11,12 +11,10 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score
 from sklearn.model_selection import GridSearchCV
 
-import xgboost as xgb
-
 import copy
 
 import sys
-sys.path.append('C:/Users/GKiuc339340273/skunk/dstools')
+sys.path.append('C:/dstools')
 from library import runXgb_opti as rnx
 from library import runRf_opti as rnr
 

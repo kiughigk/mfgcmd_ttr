@@ -30,14 +30,15 @@ sys.path.append('C:/dstools')
 from params import ml4xti_const as xtiConst
 import utils as ut
 from library import feature_selection as fs
-from library import runXgb_opti as rnx
-from library import runRf_opti  as rnr
+from library import runXgb_opti  as rnx
+from library import runRf_opti   as rnr
+from library import runSkNn_opti as sknn
 
 import os
 sys.path.append(os.getcwd())
 import ml_params as mlp
 
-def pipeline_xti(tCol, sepTestData=True, doDropNoXti=True, doFeatSel=True, saveDir=None):
+def pipeline_xti(tCol, sepTestData=True, doDropNoXti=True, doFeatSel=True, doNorm=False, saveDir=None, featureList=None):
     #tCol           ... column name of target
 
     print('algorithm is: %s %s' % (mlp.algo['model'], mlp.algo['ftype']))
@@ -49,13 +50,16 @@ def pipeline_xti(tCol, sepTestData=True, doDropNoXti=True, doFeatSel=True, saveD
         saveDir = '.'
     
     #featureList
-    featureList = mlp.featureList
+    if (featureList == None):
+        featureList = mlp.featureList
 
     #data set
     df = mlp.dfData.reset_index(drop=True)
     #drop inf data
     with pd.option_context('mode.use_inf_as_na', True):
-        nonNaIndex = list(df.loc[:,featureList].dropna().index)
+        #nonNaIndex = list(df.loc[:,featureList].dropna().index)
+        #temporary for neural network
+        nonNaIndex = list(df.loc[:,mlp.featureList].dropna().index)
         df = df.loc[nonNaIndex,:].reset_index(drop=True)
         
     #separate data to training and testing 
@@ -78,6 +82,19 @@ def pipeline_xti(tCol, sepTestData=True, doDropNoXti=True, doFeatSel=True, saveD
     # drop non XTI head
     if (doDropNoXti == True ):
         dfTrain = drop_noxti(dfTrain, tCol, THRESH=np.log10(xtiConst.XTI_NMAX_THRESH))
+
+    # Normalization
+    if (doNorm == True):
+        dfStats  = dfTrain.loc[:,featureList].describe()
+        arrTrainTargetVal = dfTrain.loc[:,tCol].values
+        dfTrain  = (dfTrain.loc[:,featureList] - dfStats.loc['mean']) / dfStats.loc['std']
+        dfTrain.loc[:,tCol] = arrTrainTargetVal
+        dfTrain.to_pickle('./%s/dfTrain_normed.pkl' % saveDir)
+        if (sepTestData == True):
+            arrTestTargetVal = dfTest.loc[:,tCol].values
+            dfTest = (dfTest.loc[:,featureList] - dfStats.loc['mean']) / dfStats.loc['std']
+            dfTest.loc[:,tCol] = arrTestTargetVal
+            dfTest.to_pickle('./%s/dfTest_normed.pkl' % saveDir)
     
     # feature selection
     if (doFeatSel == True):
@@ -118,8 +135,11 @@ def pipeline_xti(tCol, sepTestData=True, doDropNoXti=True, doFeatSel=True, saveD
         mlModel = rnx.runXgb_opti('reg', xdata, tdata, **params_dict)
     elif (mlp.algo['model'] == 'rf'):
         mlModel = rnr.runRf_opti('reg', xdata, tdata, **params_dict)
+    elif (mlp.algo['model'] == 'sknn'):    
+        mlModel = sknn.runSkNn_opti('reg', xdata, tdata, **params_dict)
     else:
-        return ('invalid ML model')
+        print('invalid ML model')
+        return()
     mlModel.runCv()
 
     pickle.dump(mlModel, open('%s/%s_%s_%s.pkl' % (saveDir, mlp.algo['model'], mlp.algo['ftype'], tCol), 'wb'))
@@ -212,11 +232,12 @@ def pred_w_test_data(df, tCol, mlModel, feature_list, saveDir):
 
 
     ### feature importance ###
-    fig, ax = plt.subplots(1,1, sharex=False, sharey=False, figsize=(5*1+0.2,12*1))
-    importances = pd.Series(mlModel.reg_best.feature_importances_, index = feature_list)
-    importances = importances.sort_values()
-    importances[-30:].plot(kind = "barh", color='blue', ax=ax)
-    ax.set_title("Feature Importance")
-    plt.tight_layout()
-    plt.savefig('./%s/%s_feature_importance.png' % (saveDir, tCol), format='png')
-    ax.cla()
+    if (mlp.algo['model'] != 'sknn'):  
+        fig, ax = plt.subplots(1,1, sharex=False, sharey=False, figsize=(5*1+0.2,12*1))
+        importances = pd.Series(mlModel.reg_best.feature_importances_, index = feature_list)
+        importances = importances.sort_values()
+        importances[-30:].plot(kind = "barh", color='blue', ax=ax)
+        ax.set_title("Feature Importance")
+        plt.tight_layout()
+        plt.savefig('./%s/%s_feature_importance.png' % (saveDir, tCol), format='png')
+        ax.cla()

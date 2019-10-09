@@ -29,13 +29,13 @@ MUEC_NO_ERROR = 0
 
 
 #appendix of nmax of prediction
-apdx4pred = 'max_sknn_rf_xgb'
+#apdx4pred = 'max_sknn_rf_xgb'
 #prediction is func at even bands and srst at odd bands, then func_even is True
 func_even = True
 
 
 #main function
-def make_acrp (df, lBand, usePred, saveDir):
+def make_acrp (df, lBand, usePred, saveDir, apdx4pred = 'max_sknn_rf_xgb'):
 
     df = df.reset_index(drop=True)
 
@@ -56,7 +56,11 @@ def make_acrp (df, lBand, usePred, saveDir):
         lhd   = df.loc[idx,'lhd']
         print(idx, hddsn, lhd)
         for band in lBand:
-            dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'func', usePred=usePred, tempUpdateFlag=0xf, debug=False)
+            #dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'func', usePred=usePred, tempUpdateFlag=0xf, debug=False, apdx4pred=apdx4pred)
+            dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'func', usePred=usePred, tempUpdateFlag=0x2, debug=False, apdx4pred=apdx4pred)
+
+    #pick up and copy max risk values at specified temps
+    dfAcrp = pickUpAndCopy_MaxRvOfTemps(dfAcrp, pickUpTempZone=1, tempUpdateFlag=0xd)
 
     #band copy
     dfAcrp = do_rv_copy(dfAcrp, tempUpdateFlag=0xf, debug=False)
@@ -74,7 +78,7 @@ def make_acrp (df, lBand, usePred, saveDir):
         lhd   = df.loc[idx,'lhd']
         print(idx, hddsn, lhd)
         for band in lBand:
-            dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'srst', usePred=usePred, tempUpdateFlag=0x9, debug=False)
+            dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'srst', usePred=usePred, tempUpdateFlag=0x9, debug=False, apdx4pred=apdx4pred)
 
     #band copy
     dfAcrp = do_rv_copy(dfAcrp, tempUpdateFlag=0x9, debug=False)
@@ -82,8 +86,16 @@ def make_acrp (df, lBand, usePred, saveDir):
     #compare DRAM image and RID
     dfAcrpRid = compare_dram_rid(dfAcrp, dfAcrpRid)
 
+    ### before temp interpolation, save data to csv and pickle ###
+    dfAcrpRid.to_csv('./%s/dfAcrpWoTempInterp.csv' % saveDir)
+    dfAcrpRid.to_pickle('./%s/dfAcrpWoTempInterp.pkl' % saveDir)
     
-    # save data to csv and pickle
+    
+    ### Temp Interpolation ###
+    dfAcrpRid = interpolate_ati_profile_byband(dfAcrpRid, df)
+
+    
+    ### save data to csv and pickle ###
     dfAcrpRid.to_csv('./%s/dfAcrp.csv' % saveDir)
     dfAcrpRid.to_pickle('./%s/dfAcrp.pkl' % saveDir)
     
@@ -91,7 +103,7 @@ def make_acrp (df, lBand, usePred, saveDir):
 
 
 
-def make_acrp_table():
+def make_blank_acrp_table():
     
     #arrRv = [[0] * 4] * 3
     colList = ['hddsn', 'lhd']
@@ -106,26 +118,29 @@ def make_acrp_table():
     return(df)
 
 
-
-def make_defAcrp(dfNmax):
+# df is a dataframe having hddsn and lhd for testing
+def make_defAcrp(df): 
     
-    dfAcrp = make_acrp_table()
-    dfAcrp.loc[:, 'hddsn'] = dfNmax.loc[:,'hddsn'].values
-    dfAcrp.loc[:, 'lhd']   = dfNmax.loc[:,'lhd'].values
+    dfAcrp = make_blank_acrp_table()
+    dfAcrp.loc[:, 'hddsn'] = df.loc[:,'hddsn'].values
+    dfAcrp.loc[:, 'lhd']   = df.loc[:,'lhd'].values
     dfAcrp.loc[:,'rvn_c_0':'rvp_s_63'] = 1.0
     
     return(dfAcrp)
 
 
-
-def setup4dati(dfNmax, proc, tempUpdateFlag=0xf):
+# df is a dataframe having hddsn, lhd, wrnummins and wrnumplus for testing
+# values of wrnummins and wrnumplus are interpolated nmax of SATI at 64bands
+def setup4dati(df, proc, tempUpdateFlag=0xf):
     
     T = 30000; #force refresh
     
-    dfAcrp = make_acrp_table()
-    dfAcrp.loc[:, 'hddsn'] = dfNmax.loc[:,'hddsn'].values
-    dfAcrp.loc[:, 'lhd']   = dfNmax.loc[:,'lhd'].values
-    dfAcrp.loc[:,'rvn_c_0':'rvp_s_63'] = 1.0
+    #dfAcrp = make_blank_acrp_table()
+    #dfAcrp.loc[:, 'hddsn'] = df.loc[:,'hddsn'].values
+    #dfAcrp.loc[:, 'lhd']   = df.loc[:,'lhd'].values
+    #dfAcrp.loc[:,'rvn_c_0':'rvp_s_63'] = 1.0
+
+    dfAcrp = make_defAcrp(df)
     
     for tmprZone in range(0, 4, 1):
         
@@ -134,8 +149,8 @@ def setup4dati(dfNmax, proc, tempUpdateFlag=0xf):
         
         tmpr = tempList[tmprZone]
         
-        arrNmax0   = dfNmax.loc[:, 'wrnumminus_%d_%s'%(0, proc):'wrnumminus_%d_%s'%(63, proc)].values / SATI_MULTIPLIER[tmprZone]
-        arrNmax100 = dfNmax.loc[:, 'wrnumplus_%d_%s'% (0, proc):'wrnumplus_%d_%s'% (63, proc)].values / SATI_MULTIPLIER[tmprZone]
+        arrNmax0   = df.loc[:, 'wrnumminus_%d_%s'%(0, proc):'wrnumminus_%d_%s'%(63, proc)].values / SATI_MULTIPLIER[tmprZone]
+        arrNmax100 = df.loc[:, 'wrnumplus_%d_%s'% (0, proc):'wrnumplus_%d_%s'% (63, proc)].values / SATI_MULTIPLIER[tmprZone]
 
         arrRVn = np.ceil(T/arrNmax0)
         arrRVp = np.ceil(T/arrNmax100)
@@ -147,7 +162,7 @@ def setup4dati(dfNmax, proc, tempUpdateFlag=0xf):
     
 
 
-def update_rv4dati(dfNmax, dfAcrp, sn, hd, band, proc, usePred, tempUpdateFlag=0xf, debug=False):
+def update_rv4dati(dfNmax, dfAcrp, sn, hd, band, proc, usePred, apdx4pred, tempUpdateFlag=0xf, debug=False):
     
     RvScaling = DEFAULT_RV_SCALING_1
     T = 30000; #force refresh
@@ -160,9 +175,11 @@ def update_rv4dati(dfNmax, dfAcrp, sn, hd, band, proc, usePred, tempUpdateFlag=0
 
     nmax50byband = 'nmax50byband_%d_%s' % (band, proc)
     if (usePred == True):
+        #prediction ... func at even bands or srst at odd bands
         if (func_even == True):
             if ((proc=='func') and (band%2 == 0)) or ((proc=='srst') and (band%2 == 1)):
                 nmax50byband = 'nmax50byband_%d_%s_%s' % (band, proc, apdx4pred)
+        #prediction ... func at odd bands or srst at even bands
         else:
             if ((proc=='func') and (band%2 == 1)) or ((proc=='srst') and (band%2 == 0)):
                 nmax50byband = 'nmax50byband_%d_%s_%s' % (band, proc, apdx4pred)
@@ -298,7 +315,28 @@ def update_rv4dati(dfNmax, dfAcrp, sn, hd, band, proc, usePred, tempUpdateFlag=0
         return(0)
 
 
+def pickUpAndCopy_MaxRvOfTemps(dfAcrp, pickUpTempZone=0x1, tempUpdateFlag=0xf):
     
+    dfAcrp_ref = dfAcrp.copy(deep=True)
+    tempUpdateMap = [bool(tempUpdateFlag & 0x1), bool(tempUpdateFlag & 0x2), bool(tempUpdateFlag & 0x4), bool(tempUpdateFlag & 0x8)]
+    
+    for band in range(0,64):
+        
+        pickUpRvn   = dfAcrp_ref.loc[:,'rvn_%s_%d'%(tempList[pickUpTempZone], band)].values
+        pickUpRvp   = dfAcrp_ref.loc[:,'rvp_%s_%d'%(tempList[pickUpTempZone], band)].values
+        
+        for tmprZone in range(0, 4, 1):
+            
+            if ( ((tempUpdateFlag >> tmprZone) & 0x1) == 0 ):
+                continue
+
+            tmpr = tempList[tmprZone]
+            dfAcrp.loc[:, 'rvn_%s_%d' % (tmpr, band)] = np.max([dfAcrp.loc[:, 'rvn_%s_%d' % (tmpr, band)].values, pickUpRvn], axis=0)
+            dfAcrp.loc[:, 'rvp_%s_%d' % (tmpr, band)] = np.max([dfAcrp.loc[:, 'rvp_%s_%d' % (tmpr, band)].values, pickUpRvp], axis=0)
+    
+    return(dfAcrp)
+
+
 def do_rv_copy(dfAcrp, tempUpdateFlag=0xf, debug=False):
     
     dfAcrp_ref = dfAcrp.copy(deep=True)

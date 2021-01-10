@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
 
-def sig_test (dfSampA, dfSampB, paramList):
+def sig_test (dfSampA, dfSampB, paramList, a2a=False, keyCol=['hddsn', 'lhd']):
     """
     Arguments
         dfSampA:   e2e data of sample A [dataframe]
@@ -30,19 +30,28 @@ def sig_test (dfSampA, dfSampB, paramList):
     df = pd.DataFrame({}, columns=['pValKs', 'pValT', 'pValThresh'])
     for param in paramList:
 
-        tmp = sig_test_by_param(dfSampA, dfSampB, param)
+        tmp = sig_test_by_param(dfSampA, dfSampB, param, a2a, keyCol)
         df.loc[param] = [tmp[1], tmp[3], pValThre]
 
     return(df)
     
 
-def sig_test_by_param( dfSampA, dfSampB, param ):
+def sig_test_by_param( dfSampA, dfSampB, param, a2a, keyCol):
 
     isInvalid = check_dataframe(dfSampA, dfSampB, param)
     
     if (isInvalid == False):
-        arrSampA = dfSampA[param].dropna().values
-        arrSampB = dfSampB[param].dropna().values   
+        if (a2a==False):
+            arrSampA = dfSampA[param].dropna().values
+            arrSampB = dfSampB[param].dropna().values
+        else:
+            colA, colB = list(dfSampA.columns), list(dfSampB.columns)
+            for key in keyCol:
+                if (not(key in colA) or not(key in colB)):
+                    return ('%s does not exist' % key)
+            dfSampAB = dfSampA.loc[:,keyCol+[param]].merge(dfSampB.loc[:,keyCol+[param]], left_on=keyCol, right_on=keyCol, suffixes=('_A','_B'), how='inner').dropna()
+            arrSampA = dfSampAB.loc[:,param+'_A'].values
+            arrSampB = dfSampAB.loc[:,param+'_B'].values
         ksVal = stats.ks_2samp(arrSampA, arrSampB)
         tVal  = stats.ttest_ind(arrSampA, arrSampB, axis=0, equal_var=False)
         rslt = [ksVal[0], ksVal[1], tVal[0], tVal[1], len(arrSampA), len(arrSampB)]
@@ -67,7 +76,7 @@ def check_dataframe(dfSampA, dfSampB, param):
     return(isInvalid)
     
 
-def plot_sig_test(dfSampA, dfSampB, paramList, legA=None, legB=None,  figName='twoHist.pdf'):
+def plot_sig_test(dfSampA, dfSampB, paramList, legA=None, legB=None, binSize=50, figName='twoHist.pdf', a2a=False, keyCol=['hddsn', 'lhd']):
     """
     Arguments
         dfSampA:   e2e data of sample A [dataframe]
@@ -78,7 +87,7 @@ def plot_sig_test(dfSampA, dfSampB, paramList, legA=None, legB=None,  figName='t
         
     """
 
-    binSize = 50
+    #binSize = 50
     pp = PdfPages(figName)     
     for param in paramList:
 
@@ -86,8 +95,20 @@ def plot_sig_test(dfSampA, dfSampB, paramList, legA=None, legB=None,  figName='t
         
         if (isInvalid == False):
             
-            arrSampA = dfSampA[param].dropna().values
-            arrSampB = dfSampB[param].dropna().values
+            #arrSampA = dfSampA[param].dropna().values
+            #arrSampB = dfSampB[param].dropna().values
+            if (a2a==False):
+                arrSampA = dfSampA[param].dropna().values
+                arrSampB = dfSampB[param].dropna().values
+            else:
+                colA, colB = list(dfSampA.columns), list(dfSampB.columns)
+                for key in keyCol:
+                    if (not(key in colA) or not(key in colB)):
+                        return ('%s does not exist' % key)
+                dfSampAB = dfSampA.loc[:,keyCol+[param]].merge(dfSampB.loc[:,keyCol+[param]], left_on=keyCol, right_on=keyCol, suffixes=('_A','_B'), how='inner').dropna()
+                arrSampA = dfSampAB.loc[:,param+'_A'].values
+                arrSampB = dfSampAB.loc[:,param+'_B'].values
+                
             ksVal = stats.ks_2samp(arrSampA, arrSampB)      
             tVal  = stats.ttest_ind(arrSampA, arrSampB, axis=0, equal_var=False)
             
@@ -109,7 +130,7 @@ def plot_sig_test(dfSampA, dfSampB, paramList, legA=None, legB=None,  figName='t
             ax.set_ylabel('Number')
             ax.set_title('Pval = %0.1e(KS-Test), %0.1e(T-Test)' % (float(ksVal[1]), float(tVal[1])))
             if (legA != None) or (legB != None):
-                ax.legend(loc='best')
+                ax.legend(loc='upper left')
             ax.tick_params(labelsize=12)
             ax1.hist(arrSampA, bins=binArray+[np.inf], normed=True, histtype='step', cumulative=True, color='b')
             ax1.hist(arrSampB, bins=binArray+[np.inf], normed=True, histtype='step', cumulative=True, color='red')

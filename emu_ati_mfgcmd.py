@@ -54,7 +54,8 @@ def make_acrp (df, lBand, usePred, saveDir, apdx4pred = 'max_sknn_rf_xgb'):
     for idx in range(n):
         hddsn = df.loc[idx,'hddsn']
         lhd   = df.loc[idx,'lhd']
-        print(idx, hddsn, lhd)
+        if (idx%500 == 0):
+            print(idx, hddsn, lhd)
         for band in lBand:
             #dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'func', usePred=usePred, tempUpdateFlag=0xf, debug=False, apdx4pred=apdx4pred)
             dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'func', usePred=usePred, tempUpdateFlag=0x2, debug=False, apdx4pred=apdx4pred)
@@ -76,9 +77,11 @@ def make_acrp (df, lBand, usePred, saveDir, apdx4pred = 'max_sknn_rf_xgb'):
     for idx in range(n):
         hddsn = df.loc[idx,'hddsn']
         lhd   = df.loc[idx,'lhd']
-        print(idx, hddsn, lhd)
+        if (idx%500 == 0):
+            print(idx, hddsn, lhd)
         for band in lBand:
-            dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'srst', usePred=usePred, tempUpdateFlag=0x9, debug=False, apdx4pred=apdx4pred)
+            #dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'srst', usePred=usePred, tempUpdateFlag=0x9, debug=False, apdx4pred=apdx4pred)
+            dfAcrp = update_rv4dati(df, dfAcrp, hddsn, lhd, band, 'srst', usePred=usePred, tempUpdateFlag=0x8, debug=False, apdx4pred=apdx4pred)
 
     #band copy
     dfAcrp = do_rv_copy(dfAcrp, tempUpdateFlag=0x9, debug=False)

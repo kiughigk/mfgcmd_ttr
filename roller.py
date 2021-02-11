@@ -224,6 +224,8 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
                     lhd, sct =int(lhd), int(sct)
                     nValidSec = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'nValid'].values[0]
                     shift     = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'shift'].values[0]
+                    #below commeted out lines are not good for comparison between SER profile and RV profile
+                    """
                     #pick up a location where the value is larger (worse)
                     #1
                     failSecNormed1 = np.int(sct/nValidSec * numPoints) - ((numPoints>>1)-shift)
@@ -245,6 +247,13 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
                     else:
                         valAtFailSec = valAtFailSec2
                         failSecNormed = failSecNormed2
+                    """
+                    failSecNormed = np.int(sct/nValidSec * numPoints) - ((numPoints>>1)-shift)
+                    if failSecNormed >= numPoints:
+                        failSecNormed = failSecNormed - numPoints
+                    elif failSecNormed < 0:
+                        failSecNormed = failSecNormed + numPoints
+                    valAtFailSec = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'ser%d_pct_sort'%(failSecNormed)].values[0] - term4PerBit
                     #ax.scatter([failSecNormed/numPoints], [valAtFailsec], label='%s'%hueVal, zorder=df.shape[0], facecolor='white', edgecolor='C%s'%str(i), s=80)
                     if addLeg == True:
                         ax.scatter([failSecNormed/numPoints], [valAtFailSec], label='%s'%hueVal, zorder=df.shape[0], facecolor='white', edgecolor=cmap(i), s=80)

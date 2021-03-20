@@ -1,3 +1,6 @@
+#Aligne roller profile with FFT
+#
+#
 import pandas as pd
 import numpy as np
 from scipy import stats
@@ -8,15 +11,17 @@ import matplotlib.cm as cm
 
 #Sector Number of Roller SER is normalized to num
 
-def thinout_align(df, colList, num=200, ref=0, thinout='default', doAlign=True, savefile='df_ser_roller_align'):
+def thinout_align(df, colList, num=200, thinout='default',
+                  ref=0, doAlign=True, doRmBaseLine=True,
+                  savefile='df_ser_roller_align'):
     #df:         dataframe
     #colList:    columns of roller data: e.g., ser0, ser1, ser2, ser3, ...[
     #num:        number that normalized to
-    #ref:        index of reference profile or reference profile in list or reference profile in array
     #thinout:    max:     pick up max value
     #            min:     pick up min value
     #            mean:    pick up mean value
     #            defualt: pick up as is value
+    #ref:        index of reference profile or reference profile in list or reference profile in array
     
     
     MAX_SPT = 720
@@ -74,13 +79,25 @@ def thinout_align(df, colList, num=200, ref=0, thinout='default', doAlign=True, 
     if doAlign == True:
         #sc = shadow_comparison(df.loc[0,'ser0_pct':'ser%d_pct'%(num-1)].values, num=200)
         if isinstance(ref, int):
-            sc = shadow_comparison(df.loc[ref,'ser0_pct':'ser%d_pct'%(num-1)].values, num)
+            #need casting for polynominal fitting
+            ref_array = df.loc[ref,'ser0_pct':'ser%d_pct'%(num-1)].values.astype(np.float64)
+            #sc = shadow_comparison(df.loc[ref,'ser0_pct':'ser%d_pct'%(num-1)].values, num)
         elif isinstance(ref, list) or ('numpy.ndarray' in str(type(np.array([10,11])))):
             if (len(ref) != num):
                 print ('invalid profile')
                 return(-1)
-            sc = shadow_comparison(ref, num)
-            
+            else:
+                if isinstance(ref, list):
+                    ref_array = np.array(ref)
+                else:
+                    ref_array = ref
+            #sc = shadow_comparison(ref, num)
+        #if doRmBaseLine == True:
+        #    deg = 6
+        #    poly  = np.poly1d(np.polyfit(np.arange(len(ref_array)), ref_array, deg))
+        #    ref_array = ref_array - poly(np.arange(len(ref_array)))
+        sc = shadow_comparison(ref_array, num, doRmBaseLine)
+        
         arrTemp = np.empty((0,num+1), float)
         for idx in range(0, df.shape[0]):
             shift = sc.calc_shift(data2dnormed[idx])
@@ -133,8 +150,13 @@ def fourierComp(sp, minFreq=None, maxFreq=None):
 class shadow_comparison:
     
     
-    def __init__(self, refData, num):
-        
+    def __init__(self, refData, num, doRmBaseLine):
+
+        self.doRmBaseLine  = doRmBaseLine
+        if self.doRmBaseLine:
+            deg = 6
+            poly  = np.poly1d(np.polyfit(np.arange(len(refData)), refData, deg))
+            refData = refData - poly(np.arange(len(refData)))
         self.refData       = refData
         self.num           = num
         self.refDataMean   = self.refData.mean()
@@ -149,6 +171,10 @@ class shadow_comparison:
         
     def calc_shift(self, data):
 
+        if self.doRmBaseLine:
+            deg = 6
+            poly = np.poly1d(np.polyfit(np.arange(len(data)), data, deg))
+            data = data - poly(np.arange(len(data)))
         dataMean   = data.mean()
         dataNormed = data - dataMean
         dataSig    = data.std()

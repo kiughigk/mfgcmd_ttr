@@ -20,11 +20,14 @@ import sys
 sys.path.append('C:/dstools')
 import sig_test
 import prob_ellip
-from matplotlib.patches import Ellipse
+from matplotlib.patches import Ellipse, Polygon
 
 
 def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue=None, hue_order=None, logx=False, logy=False,
-            xlim=None, ylim=None, divX=None, divY=None, addThresh=None, addYXLine=False, addRegLine=False, deg=1, addEllipse=False, sigma=2.0):
+            xlim=None, ylim=None, divX=None, divY=None, addThresh=None, addYXLine=False, addRegLine=False, deg=1, addEllipse=False, sigma=2.0, palette='tab10', hatch=None):
+
+    #cmap = plt.get_cmap(palette)
+    cmap = cm.get_cmap(palette)
     
     fig, ax = plt.subplots(1,1, figsize=(6,4.5))
     
@@ -45,7 +48,9 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
         if hueVal == 'All':
             df2 = df.loc[:,[colX,colY]].dropna(axis=0)
         else:
-            if (df.query("%s=='%s'"%(hue, hueVal)).shape[0] == 1):
+            if (df.query("%s=='%s'"%(hue, hueVal)).shape[0] == 0):
+                continue
+            elif (df.query("%s=='%s'"%(hue, hueVal)).shape[0] == 1):
                 uniRec = True
             df2 = df.query("%s=='%s'"%(hue, hueVal)).loc[:,[colX,colY]].dropna(axis=0)
             
@@ -57,23 +62,24 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
                 ydata = ydata / divY
     
         if uniRec == False:
-            ax.scatter(xdata, ydata, c='C%s'%str(i), label=hueVal, alpha=0.5)
+            ax.scatter(xdata, ydata, c=cmap(i), label=hueVal, alpha=0.5)
         else:
-            ax.scatter(xdata, ydata, c='C%s'%str(i), label=hueVal, alpha=1, edgecolor='white', zorder=df.shape[0])
+            ax.scatter(xdata, ydata, c=cmap(i), label=hueVal, alpha=1, edgecolor='white', zorder=df.shape[0])
         #add prob ellipse
         if addEllipse == True:
             mx, my, width, height, theta = prob_ellip.get_prob_ellip_param(xdata, ydata, sigma)
             #ell = Ellipse(xy=(mx, my), width=width, height=height, angle=theta, color='C%s'%str(i+1), alpha=0.3)
-            ell = Ellipse(xy=(mx, my), width=width, height=height, angle=theta, fc='C%s'%str(i), ec='white', alpha=0.3)
+            ell = Ellipse(xy=(mx, my), width=width, height=height, angle=theta, fc=cmap(i), ec='white', alpha=0.3)
             #ell.set_facecolor('none')
             ax.add_artist(ell)
             
         
         if addRegLine == True:
             #deg = 1
-            poly  = np.poly1d(np.polyfit(xdata, ydata, deg))
-            ax.plot(np.sort(xdata), poly(np.sort(xdata)), c='white', lw=3, ls='dashed', label=poly, zorder=len(hue_order))
-            ax.plot(np.sort(xdata), poly(np.sort(xdata)), c='C%s'%str(i), lw=1, ls='dashed', label=poly, zorder=len(hue_order)+1)
+            if len(xdata) > 1:
+                poly  = np.poly1d(np.polyfit(xdata, ydata, deg))
+                ax.plot(np.sort(xdata), poly(np.sort(xdata)), c='white', lw=3, ls='dashed', label=poly, zorder=len(hue_order))
+                ax.plot(np.sort(xdata), poly(np.sort(xdata)), c=cmap(i), lw=1, ls='dashed', label=poly, zorder=len(hue_order)+1)
     
     #ax.legend(loc='best')
     if disLegend==False:
@@ -104,17 +110,26 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
         ylim2 = ax.get_ylim()
         minVal2 = np.min([xlim2[0], ylim2[0]])
         maxVal2 = np.max([xlim2[1], ylim2[1]])
-        xdata = np.linspace(minVal2, maxVal2, num=100)
-        ax.plot(xdata, addThresh(xdata), c='black', linewidth=1, linestyle='dashed')
+        xdata = np.linspace(minVal2     , maxVal2, num=100)
+        if not(isinstance(addThresh, list)):
+            ax.plot(xdata, addThresh(xdata), c='black', linewidth=1, linestyle='dashed')
+        else:
+            for coefs in addThresh:
+                ax.plot(xdata, coefs(xdata), c='black', linewidth=1, linestyle='dashed')
+                
+    if hatch!=None:
+        #hatch should be like [[0, 0], [4, 1.1], [6, 2.5], [2, 1.4]]
+        ax.add_patch(Polygon(hatch, closed=True, fill=True, color='red', alpha=0.1))
         
     plt.tight_layout()
     plt.savefig(figname+'_xyplot.png', format='png')
 
 
 def plot_cdf(df, col, xlabel, title, figname, 
-             xlim=None, hue=None, hue_order=None, div=None, addThresh=None, binSize=50, addTable=False):
+             xlim=None, hue=None, hue_order=None, div=None, addThresh=None, binSize=50, addTable=False, palette='tab10'):
     
-    cmap = cm.get_cmap('rainbow')
+    #cmap = cm.get_cmap('rainbow')
+    cmap = cm.get_cmap(palette)
     xdata = df.loc[:,col].dropna(axis=0).values
     if (div != None) and (div != 0):
         xdata = xdata / div
@@ -185,15 +200,15 @@ def plot_cdf(df, col, xlabel, title, figname,
         dfPerc.loc['median', hueVal]     = np.percentile(xdata, 100*stats.norm.cdf(0))
         dfPerc.loc['-3$\sigma$', hueVal] = np.percentile(xdata, 100*stats.norm.cdf(-3))
         dfPerc.loc['min', hueVal]        = np.min(xdata)
-    
-        if uniRec == False:
-            print(xdata.dtype)
-            ax.hist(xdata.astype(np.double), bins=binArray, density=False, histtype='stepfilled', alpha=0.3, 
-                    edgecolor='white', color='C%s'%str(i), label=hueVal)
-                    #edgecolor='white', label=hueVal)
-            ax1.hist(xdata.astype(np.double), bins=binArray+[np.inf], density=True, histtype='step', cumulative=True, lw=2, color='C%s'%str(i))
-        else:
-            ax.axvline(xdata, label=hueVal, lw=2, color='C%s'%str(i))
+
+        if xdata != np.nan:
+            if uniRec == False:
+                print(xdata.dtype)
+                ax.hist(xdata.astype(np.double), bins=binArray, density=False, histtype='stepfilled', alpha=0.3, 
+                        edgecolor='white', color=cmap(i), label=hueVal)
+                ax1.hist(xdata.astype(np.double), bins=binArray+[np.inf], density=True, histtype='step', cumulative=True, lw=2, color=cmap(i))
+            else:
+                ax.axvline(xdata, label=hueVal, lw=2, color=cmap(i))
     
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Number')
@@ -238,9 +253,9 @@ def plot_cdf(df, col, xlabel, title, figname,
 
 #qq plot
 def plot_cdf2(df, col, xlabel, title, figname, addThresh, 
-              xlim=None, ylim=None, hue=None, hue_order=None, div=None, binSize=50, addTable=False, logX=False, doBoxCox=False):
+              xlim=None, ylim=None, hue=None, hue_order=None, div=None, binSize=50, addTable=False, logX=False, doBoxCox=False, palette='tab10'):
     
-    cmap = cm.get_cmap('rainbow')
+    cmap = cm.get_cmap(palette)
     
     xdata = df.loc[:,col].dropna(axis=0).values
     if (div != None) and (div != 0):
@@ -351,7 +366,7 @@ def plot_cdf2(df, col, xlabel, title, figname, addThresh,
     
         if (uniRec == False) and (not np.isnan(np.mean(xdata))):
             ax.hist(xdata.astype(np.double), bins=binArray, density=False, histtype='stepfilled', alpha=0.3, 
-                        edgecolor='white', color='C%s'%str(i), label=hueVal)
+                        edgecolor='white', color=cmap(i), label=hueVal)
             #ax1.hist(xdata.astype(np.double), bins=binArray+[np.inf], density=True, histtype='step', cumulative=True, lw=2, color='C%s'%str(i))
             probscale.probplot(xdata.astype(np.double), 
                                ax=ax1, 
@@ -362,12 +377,12 @@ def plot_cdf2(df, col, xlabel, title, figname, addThresh,
                                datascale='linear', 
                                #problabel='Probabilities (%)', 
                                #datalabel='Min P-Value between KS-Test and T-Test',
-                               scatter_kws=dict(marker='.', markersize=5, color='C%s'%str(i), label=hueVal)
+                               scatter_kws=dict(marker='.', markersize=5, color=cmap(i), label=hueVal)
                               )
             if ylim != None:
                 ax1.set_ylim(ylim[0],ylim[1])
         elif not np.isnan(np.mean(xdata)):
-            ax.axvline(xdata, label=hueVal, lw=2, color='C%s'%str(i))
+            ax.axvline(xdata, label=hueVal, lw=2, color=cmap(i))
     
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Number')

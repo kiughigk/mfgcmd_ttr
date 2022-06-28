@@ -24,7 +24,8 @@ from matplotlib.patches import Ellipse, Polygon
 
 
 def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue=None, hue_order=None, logx=False, logy=False,
-            xlim=None, ylim=None, divX=None, divY=None, addThresh=None, addYXLine=False, addRegLine=False, deg=1, addEllipse=False, sigma=2.0, palette='tab10', hatch=None):
+            xlim=None, ylim=None, divX=None, divY=None, addThresh=None, addXThresh=None, addYXLine=False, addRegLine=False,
+            deg=1, addEllipse=False, sigma=2.0, palette='tab10', hatch=None, closefig=False, alpha=0.5, fail_hd_flag=True):
 
     #cmap = plt.get_cmap(palette)
     cmap = cm.get_cmap(palette)
@@ -61,8 +62,8 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
         if (divY != None) and (divY != 0):
                 ydata = ydata / divY
     
-        if uniRec == False:
-            ax.scatter(xdata, ydata, c=cmap(i), label=hueVal, alpha=0.5)
+        if uniRec == False or fail_hd_flag==False:
+            ax.scatter(xdata, ydata, c=cmap(i), label=hueVal, alpha=alpha)
         else:
             ax.scatter(xdata, ydata, c=cmap(i), label=hueVal, alpha=1, edgecolor='white', zorder=df.shape[0])
         #add prob ellipse
@@ -78,7 +79,7 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
             #deg = 1
             if len(xdata) > 1:
                 poly  = np.poly1d(np.polyfit(xdata, ydata, deg))
-                ax.plot(np.sort(xdata), poly(np.sort(xdata)), c='white', lw=3, ls='dashed', label=poly, zorder=len(hue_order))
+                ax.plot(np.sort(xdata), poly(np.sort(xdata)), c='white', lw=3, ls='dashed', zorder=len(hue_order))
                 ax.plot(np.sort(xdata), poly(np.sort(xdata)), c=cmap(i), lw=1, ls='dashed', label=poly, zorder=len(hue_order)+1)
     
     #ax.legend(loc='best')
@@ -116,6 +117,12 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
         else:
             for coefs in addThresh:
                 ax.plot(xdata, coefs(xdata), c='black', linewidth=1, linestyle='dashed')
+    if addXThresh != None:
+        if not(isinstance(addXThresh, list)):
+            ax.axvline(addXThresh, c='black', linewidth=1, linestyle='dashed')
+        else:
+            for thresh in addXThresh:
+                ax.axvline(thresh, c='black', linewidth=1, linestyle='dashed')
                 
     if hatch!=None:
         #hatch should be like [[0, 0], [4, 1.1], [6, 2.5], [2, 1.4]]
@@ -123,10 +130,16 @@ def plot_xy(df, colX, colY, xlabel, ylabel, title, figname, disLegend=False, hue
         
     plt.tight_layout()
     plt.savefig(figname+'_xyplot.png', format='png')
+    if closefig==True:
+        plt.close()
 
 
 def plot_cdf(df, col, xlabel, title, figname, 
              xlim=None, hue=None, hue_order=None, div=None, addThresh=None, binSize=50, addTable=False, palette='tab10'):
+
+    #can not support multiple thresholds
+    if isinstance(addTable, list):
+        addTable==False
     
     #cmap = cm.get_cmap('rainbow')
     cmap = cm.get_cmap(palette)
@@ -201,7 +214,7 @@ def plot_cdf(df, col, xlabel, title, figname,
         dfPerc.loc['-3$\sigma$', hueVal] = np.percentile(xdata, 100*stats.norm.cdf(-3))
         dfPerc.loc['min', hueVal]        = np.min(xdata)
 
-        if xdata != np.nan:
+        if dfPerc.loc['count', hueVal] > 0:
             if uniRec == False:
                 print(xdata.dtype)
                 ax.hist(xdata.astype(np.double), bins=binArray, density=False, histtype='stepfilled', alpha=0.3, 
@@ -214,7 +227,12 @@ def plot_cdf(df, col, xlabel, title, figname,
     ax.set_ylabel('Number')
     ax.set_title(title)
     if addThresh != None:
-        ax.axvline(addThresh, c='red', ls='dashed')
+        #ax.axvline(addThresh, c='red', ls='dashed')
+        if not(isinstance(addThresh, list)):
+            ax.axvline(addThresh, c='red', ls='dashed')
+        else:
+            for val in addThresh:
+                ax.axvline(val, c='red', ls='dashed')
     ax1.tick_params(labelsize=12)
     ax1.set_ylabel('CDF')
     ax.grid(axis='both',which='major')
@@ -254,6 +272,10 @@ def plot_cdf(df, col, xlabel, title, figname,
 #qq plot
 def plot_cdf2(df, col, xlabel, title, figname, addThresh, 
               xlim=None, ylim=None, hue=None, hue_order=None, div=None, binSize=50, addTable=False, logX=False, doBoxCox=False, palette='tab10'):
+
+    #can not support multiple thresholds
+    if isinstance(addThresh, list):
+        addTable=False
     
     cmap = cm.get_cmap(palette)
     
@@ -359,7 +381,9 @@ def plot_cdf2(df, col, xlabel, title, figname, addThresh,
         dfPerc.loc['median', hueVal]     = np.percentile(xdata, 100*stats.norm.cdf(0))
         dfPerc.loc['-3$\sigma$', hueVal] = np.percentile(xdata, 100*stats.norm.cdf(-3))
         dfPerc.loc['min', hueVal]        = np.min(xdata)
-        if addThresh != False:
+        
+        #can not support multiple thresholds
+        if (addThresh != False) and (addThresh != None) and not(isinstance(addThresh, list)):
             dfPerc.loc['Distance', hueVal] = np.abs(np.percentile(xdata, 100*stats.norm.cdf(0)) - addThresh)/np.std(xdata)
         else:
             dfPerc.loc['Distance', hueVal] = np.nan
@@ -387,8 +411,12 @@ def plot_cdf2(df, col, xlabel, title, figname, addThresh,
     ax.set_xlabel(xlabel)
     ax.set_ylabel('Number')
     ax.set_title(title)
-    if addThresh != False:
-        ax.axvline(addThresh, c='red', ls='dashed')
+    if (addThresh != False) and (addThresh != None):
+        if not(isinstance(addThresh, list)):
+            ax.axvline(addThresh, c='red', ls='dashed')
+        else:
+            for val in addThresh:
+                ax.axvline(val, c='red', ls='dashed')
     ax.set_xlim(xmin, xmax)
     ax1.tick_params(labelsize=12)
     ax1.set_ylabel('CDF')

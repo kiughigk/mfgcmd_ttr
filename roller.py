@@ -11,12 +11,13 @@ import matplotlib.cm as cm
 
 #Sector Number of Roller SER is normalized to num
 
-def thinout_align(df, colList, num=200, thinout='default',
+def thinout_align(df, colList, samp_num=200, thinout='default',
                   ref=0, doAlign=True, doRmBaseLine=True,
                   savefile='df_ser_roller_align'):
     #df:         dataframe
-    #colList:    columns of roller data: e.g., ser0, ser1, ser2, ser3, ...[
-    #num:        number that normalized to
+    #colList:    columns of roller data: e.g., ser0, ser1, ser2, ser3, ...
+    #            a column name of list: [value0, value1, value2, ....]  
+    #samp_num:   number that normalized to
     #thinout:    max:     pick up max value
     #            min:     pick up min value
     #            mean:    pick up mean value
@@ -24,54 +25,71 @@ def thinout_align(df, colList, num=200, thinout='default',
     #ref:        index of reference profile or reference profile in list or reference profile in array
     
     
-    MAX_SPT = 720
+    MAX_SPT = 750
     
-    if num > MAX_SPT:
-        print('num must be less than 720')
+    if samp_num > MAX_SPT:
+        print('samp_num must be less than 720')
         return(-1)
     
-    #data2d = df.loc[:,'ser0':'ser720'].values
-    #data2d = df.loc[:,'itr1':'itr539'].values
-    data2d = df.loc[:,colList].values
-    n = data2d.shape[0]
-    
-    #count valid data number by head
-    nValid = df.loc[:,colList].count(axis=1)
-    
-    #select indices to pick up by sector ser data
-    idx2d  = [np.ceil(np.linspace(0,x-1,num,endpoint=True)).astype(int) for x in nValid]
+    if isinstance(colList, str):
+        data2d = []
+        nValid = []
+        for vals in df.loc[:,colList].values:
+            data2d.append(eval(vals))
+            nValid.append(len(eval(vals)))
+        nData2d = len(data2d)
+    elif isinstance(colList, list):
+        data2d = df.loc[:,colList].values
+        #n = data2d.shape[0]
+        nData2d = data2d.shape[0]
+        #count valid data number by head
+        nValid = df.loc[:,colList].count(axis=1)
+    else:
+        return ('!!! invalid colList !!!')
+
+    """
+    #select indices to pick up by sector data
+    #idx2d  = [np.ceil(np.linspace(0,x-1,samp_num,endpoint=True)).astype(int) for x in nValid]
+    #elemets should be cyclic,
+    #so from index 0 to index n(index n == index 0) execute linspace with endpoint=True
+    #then remove last elements
+    #then obtained list is as expected
+    """
+    idx2d  = [np.ceil(np.linspace(0, x, samp_num+1, endpoint=True))[:-1].astype(int) for x in nValid]
     
     #thin out by sector ser data to num points
-    data2dnormed = np.empty((0,num), float)
-    for i in range(n):
+    data2dnormed = np.empty((0,samp_num), float)
+    #for i in range(n):
+    for i in range(nData2d):
     #    data2dnormed = np.append(data2dnormed, [data2d[i][idx2d[i]]], axis=0)
         vals = []
         if thinout == 'mean':
-            for j in range(num):
-                if j < (num-1):
+            for j in range(samp_num):
+                if j < (samp_num-1):
                     vals.append(np.mean(data2d[i][idx2d[i][j]:idx2d[i][j+1]]))
                 else:
                     vals.append(np.mean(data2d[i][idx2d[i][j]:nValid[i]]))
             data2dnormed = np.append(data2dnormed, [vals], axis=0)
         elif thinout == 'max':
-            for j in range(num):
-                if j < (num-1):
+            for j in range(samp_num):
+                if j < (samp_num-1):
                     vals.append(np.max(data2d[i][idx2d[i][j]:idx2d[i][j+1]]))
                 else:
                     vals.append(np.max(data2d[i][idx2d[i][j]:nValid[i]]))
             data2dnormed = np.append(data2dnormed, [vals], axis=0)
         elif thinout == 'min':
-            for j in range(num):
-                if j < (num-1):
+            for j in range(samp_num):
+                if j < (samp_num-1):
                     vals.append(np.min(data2d[i][idx2d[i][j]:idx2d[i][j+1]]))
                 else:
                     vals.append(np.min(data2d[i][idx2d[i][j]:nValid[i]]))
             data2dnormed = np.append(data2dnormed, [vals], axis=0)
         else:
+            print('defalut thinning')
             data2dnormed = np.append(data2dnormed, [data2d[i][idx2d[i]]], axis=0)
             
         
-    temp = pd.DataFrame(data=data2dnormed, columns=["ser{}_pct".format(x) for x in range(num)])
+    temp = pd.DataFrame(data=data2dnormed, columns=["val{}_pct".format(x) for x in range(samp_num)])
     df = df.merge(temp, left_index=True, right_index=True, how='inner')
     #return(temp)
     
@@ -80,10 +98,10 @@ def thinout_align(df, colList, num=200, thinout='default',
         #sc = shadow_comparison(df.loc[0,'ser0_pct':'ser%d_pct'%(num-1)].values, num=200)
         if isinstance(ref, int):
             #need casting for polynominal fitting
-            ref_array = df.loc[ref,'ser0_pct':'ser%d_pct'%(num-1)].values.astype(np.float64)
+            ref_array = df.loc[ref,'val0_pct':'val%d_pct'%(samp_num-1)].values.astype(np.float64)
             #sc = shadow_comparison(df.loc[ref,'ser0_pct':'ser%d_pct'%(num-1)].values, num)
         elif isinstance(ref, list) or ('numpy.ndarray' in str(type(np.array([10,11])))):
-            if (len(ref) != num):
+            if (len(ref) != samp_num):
                 print ('invalid profile')
                 return(-1)
             else:
@@ -96,15 +114,15 @@ def thinout_align(df, colList, num=200, thinout='default',
         #    deg = 6
         #    poly  = np.poly1d(np.polyfit(np.arange(len(ref_array)), ref_array, deg))
         #    ref_array = ref_array - poly(np.arange(len(ref_array)))
-        sc = shadow_comparison(ref_array, num, doRmBaseLine)
+        sc = shadow_comparison(ref_array, samp_num, doRmBaseLine)
         
-        arrTemp = np.empty((0,num+1), float)
+        arrTemp = np.empty((0,samp_num+1), float)
         for idx in range(0, df.shape[0]):
             shift = sc.calc_shift(data2dnormed[idx])
-            arrTemp0 = np.append(data2dnormed[idx][(num>>1)-shift:],data2dnormed[idx][:(num>>1)-shift])
+            arrTemp0 = np.append(data2dnormed[idx][(samp_num>>1)-shift:],data2dnormed[idx][:(samp_num>>1)-shift])
             arrTemp = np.append(arrTemp, [np.append(arrTemp0, np.array([shift]))], axis=0)
         
-        temp = pd.DataFrame(data=arrTemp, columns=["ser{}_pct_sort".format(x) for x in range(num)]+['shift'])
+        temp = pd.DataFrame(data=arrTemp, columns=["val{}_pct_sort".format(x) for x in range(samp_num)]+['shift'])
         df = df.merge(temp, left_index=True, right_index=True, how='inner')
         
     df.loc[:,'nValid'] = nValid
@@ -200,21 +218,24 @@ class shadow_comparison:
 #plot roller SER profile
 
 def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaster SER (Symbol ER)',
-                            logy=False, ylim=None, calcPerBit=False, hue=None, addFailSec=False, addLeg=False):
+                            logy=False, ylim=None, calcPerBit=False, hue=None, hue_order=None, addFailSec=False, addLeg=False, figsize=(10,6), palette='tab20c'):
     
-    fig, ax = plt.subplots(1,1, sharex=True, sharey=True, figsize=(10, 6))
+    fig, ax = plt.subplots(1,1, sharex=True, sharey=True, figsize=figsize)
     
-    cmap = plt.cm.get_cmap('tab20c')
+    cmap = plt.cm.get_cmap(palette)
     
     term4PerBit = 0.0
     if calcPerBit == True:
         term4PerBit = np.log10(12.0) 
         
     if hue != None:
-        hueList = list(np.sort(df.loc[:,hue].unique()))
-        #if len(hueList) > 4:
-        #    hue = None   
-    if hue == None:
+        if (hue_order == None) or (not(isinstance(hue_order, list))):
+            hueList = list(np.sort(df.loc[:,hue].unique()))
+            #if len(hueList) > 4:
+            #    hue = None
+        else:
+            hueList = hue_order
+    else:
         hueList = ['All']
     
     print(hueList)
@@ -226,19 +247,19 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
         uniRec = False
         
         if hueVal == 'All':
-            ydata = (df.loc[:,'ser0_pct_sort':'ser%d_pct_sort'%(numPoints-1)].values - term4PerBit).T
+            ydata = (df.loc[:,'val0_pct_sort':'val%d_pct_sort'%(numPoints-1)].values - term4PerBit).T
             xdata = np.tile(np.arange(numPoints),(len(ydata[0]),1)).T
             ax.plot(xdata/numPoints, ydata, linewidth=0.5, c='C%s'%str(i), alpha=0.2)
         else:
             if (df.query("%s=='%s'"%(hue, hueVal)).shape[0] > 1):
-                ydata = (df.query("%s=='%s'"%(hue, hueVal)).loc[:,'ser0_pct_sort':'ser%d_pct_sort'%(numPoints-1)].dropna(axis=0).values - term4PerBit).T
+                ydata = (df.query("%s=='%s'"%(hue, hueVal)).loc[:,'val0_pct_sort':'val%d_pct_sort'%(numPoints-1)].dropna(axis=0).values - term4PerBit).T
                 xdata = np.tile(np.arange(numPoints),(len(ydata[0]),1)).T
                 #ax.plot(xdata/numPoints, ydata, linewidth=0.5, c='C%s'%str(i), alpha=0.2)
-                #ax.plot(xdata/numPoints, ydata, linewidth=0.5, c=cmap(i), alpha=0.2)
-                ax.plot(xdata/numPoints, ydata, linewidth=0.5, c='C%s'%str(0), alpha=0.2)
+                ax.plot(xdata/numPoints, ydata, linewidth=0.5, c=cmap(i), alpha=0.2)
+                #ax.plot(xdata/numPoints, ydata, linewidth=0.5, c='C%s'%str(0), alpha=0.2)
             else:
                 uniRec = True
-                ydata = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'ser0_pct_sort':'ser%d_pct_sort'%(numPoints-1)].values - term4PerBit
+                ydata = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'val0_pct_sort':'val%d_pct_sort'%(numPoints-1)].values - term4PerBit
                 xdata = np.arange(numPoints)
                 #ax.plot(xdata/numPoints, ydata[0], linewidth=2, c='C%s'%str(i), alpha=1, zorder=df.shape[0]-1)
                 if addLeg==True:
@@ -246,7 +267,9 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
                 else:
                     ax.plot(xdata/numPoints, ydata[0], linewidth=0.5, c='red', alpha=0.2, zorder=df.shape[0]-1)
                 if addFailSec == True:
-                    sn, lhd, sct = hueVal.split('_')
+                    #sn, lhd, sct = hueVal.split('_')
+                    sn_hsc = hueVal.split('_'); #sn_lhd_sct_cyl
+                    sn, lhd, sct = sn_hsc[0], sn_hsc[1], sn_hsc[2]
                     lhd, sct =int(lhd), int(sct)
                     nValidSec = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'nValid'].values[0]
                     shift     = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'shift'].values[0]
@@ -259,14 +282,14 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
                         failSecNormed1 = failSecNormed1 - numPoints
                     elif failSecNormed1 < 0:
                         failSecNormed1 = failSecNormed1 + numPoints
-                    valAtFailSec1 = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'ser%d_pct_sort'%(failSecNormed1)].values[0] - term4PerBit
+                    valAtFailSec1 = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'val%d_pct_sort'%(failSecNormed1)].values[0] - term4PerBit
                     #2
                     failSecNormed2 = np.int(sct/nValidSec * numPoints) - ((numPoints>>1)-shift) + 1
                     if failSecNormed2 >= numPoints:
                         failSecNormed2 = failSecNormed2 - numPoints
                     elif failSecNormed2 < 0:
                         failSecNormed2 = failSecNormed2 + numPoints
-                    valAtFailSec2 = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'ser%d_pct_sort'%(failSecNormed2)].values[0] - term4PerBit
+                    valAtFailSec2 = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'val%d_pct_sort'%(failSecNormed2)].values[0] - term4PerBit
                     if (valAtFailSec1 > valAtFailSec2):
                         valAtFailSec = valAtFailSec1
                         failSecNormed = failSecNormed1
@@ -279,7 +302,7 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
                         failSecNormed = failSecNormed - numPoints
                     elif failSecNormed < 0:
                         failSecNormed = failSecNormed + numPoints
-                    valAtFailSec = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'ser%d_pct_sort'%(failSecNormed)].values[0] - term4PerBit
+                    valAtFailSec = df.query("%s=='%s'"%(hue, hueVal)).loc[:,'val%d_pct_sort'%(failSecNormed)].values[0] - term4PerBit
                     #ax.scatter([failSecNormed/numPoints], [valAtFailsec], label='%s'%hueVal, zorder=df.shape[0], facecolor='white', edgecolor='C%s'%str(i), s=80)
                     if addLeg == True:
                         ax.scatter([failSecNormed/numPoints], [valAtFailSec], label='%s'%hueVal, zorder=df.shape[0], facecolor='white', edgecolor=cmap(i), s=80)
@@ -307,10 +330,9 @@ def plot_roller_ser_profile(df, numPoints, title, figname, ylabel='Roller Coaste
 def plot_roller_ser_profile_by_target(df, numPoints, title, figname, ylabel='Roller Coaster SER (Symbol ER)',
                                       logy=False, ylim=None, calcPerBit=False,
                                       #addFailSec=False, #addLeg=False,
-                                      target='mcw_nm'
-                                       ):
+                                      target='mcw_nm', figsize=(10, 6)):
     
-    fig, ax = plt.subplots(1,1, sharex=True, sharey=True, figsize=(10, 6))
+    fig, ax = plt.subplots(1,1, sharex=True, sharey=True, figsize=figsize)
 
     df = df.reset_index()
     
@@ -329,7 +351,7 @@ def plot_roller_ser_profile_by_target(df, numPoints, title, figname, ylabel='Rol
     
     xdata = np.arange(numPoints)
     for i in range(df.shape[0]):
-        ydata = df.loc[i,'ser0_pct_sort':'ser%d_pct_sort'%(numPoints-1)].values - term4PerBit
+        ydata = df.loc[i,'val0_pct_sort':'val%d_pct_sort'%(numPoints-1)].values - term4PerBit
         ax.plot(xdata/numPoints, ydata, linewidth=0.5, alpha=0.6, c=cm.rainbow((df.loc[i,target]-vmin)/barRange))
             
     ax.set_xlabel('Normalized Sector')
